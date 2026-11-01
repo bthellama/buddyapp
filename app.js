@@ -54,6 +54,14 @@ function addDays(dateStr, n) {
   d.setDate(d.getDate() + n);
   return isoDate(d);
 }
+function amountLabel(h) {
+  if (h.reps) return `${h.reps}×`;
+  if (!h.minutes) return "";
+  if (h.minutes < 60) return `~${h.minutes} Min.`;
+  const hrs = Math.floor(h.minutes / 60), rest = h.minutes % 60;
+  return `~${hrs} Std.${rest ? ` ${rest} Min.` : ""}`;
+}
+const amountPill = (h) => (amountLabel(h) ? ` <span class="pill">${amountLabel(h)}</span>` : "");
 const weekDays = (monday) => [...Array(7)].map((_, i) => addDays(monday, i));
 const uid = () => state.session?.user?.id;
 const nameOf = (id) => state.profiles[id]?.display_name || "Jemand";
@@ -250,7 +258,7 @@ function renderToday() {
     const done = doneOn(h.id, t), wc = weekCount(h.id, monday), s = streak(h);
     return `<div class="habit">
       <button class="check ${done ? "done" : ""}" data-action="toggle" data-id="${h.id}" aria-label="${esc(h.name)} heute ${done ? "nicht erledigt" : "erledigt"}">${done ? "✓" : ""}</button>
-      <div class="grow"><div class="habit-name">${esc(h.name)}${h.minutes ? ` <span class="pill">~${h.minutes} Min.</span>` : ""}</div>
+      <div class="grow"><div class="habit-name">${esc(h.name)}${amountPill(h)}</div>
         <div class="muted">${wc}/${h.per_week} diese Woche ${wc >= h.per_week ? "✅" : ""} ${s ? `<span class="pill">🔥 ${s} Wo.</span>` : ""}</div>
         ${habitWeekDots(h)}</div></div>`;
   }).join("") : `<p class="muted">Noch keine Habits. <button class="btn small" data-action="nav" data-view="habits">Plan erstellen</button></p>`;
@@ -264,7 +272,7 @@ function renderToday() {
       const action = done ? `<span class="pill ok">✓ heute</span>`
         : nudged ? `<span class="pill">angestupst</span>`
         : `<button class="btn small" data-action="nudge" data-id="${h.id}" data-to="${bid}">Anstupsen</button>`;
-      return `<div class="habit"><div class="grow"><div class="habit-name">${esc(h.name)}</div>
+      return `<div class="habit"><div class="grow"><div class="habit-name">${esc(h.name)}${amountPill(h)}</div>
         <div class="muted">${wc}/${h.per_week} diese Woche ${wc >= h.per_week ? "✅" : ""}</div>${habitWeekDots(h)}</div>${action}</div>`;
     }).join("") || `<p class="muted">Noch keine Habits erfasst.</p>`;
     return `<div class="card"><div class="hero"><div><b>${esc(nameOf(bid))}</b> <span class="muted">mit ${esc(dogOf(bid))}</span></div>
@@ -290,15 +298,30 @@ function renderHabits() {
   const opts = (sel, from, to, extra = "") => extra + [...Array(to - from + 1)].map((_, i) => from + i)
     .map((v) => `<option value="${v}" ${v === sel ? "selected" : ""}>${v}</option>`).join("");
 
+  const unitOf = (h) => (h.reps ? "reps" : h.minutes ? "minutes" : "");
+  const amountField = (h) => {
+    const u = unitOf(h);
+    if (!u) return "";
+    return `<input type="number" inputmode="numeric" data-action="amount" data-id="${h.id}" min="1" max="${u === "minutes" ? 600 : 100}"
+      value="${u === "minutes" ? h.minutes : h.reps}" aria-label="${u === "minutes" ? "Minuten" : "Wiederholungen"}" style="flex:1;min-width:70px">`;
+  };
+
   appEl.innerHTML = `
     <h1>Mein Plan</h1>
     <p class="muted">Wie oft pro Woche willst du was üben? Wie du es übst, entscheidest du – jeder Hund ist anders.</p>
     <div class="card">${mine.length ? mine.map((h) => `
       <div class="habit" style="flex-wrap:wrap">
         <div class="grow"><div class="habit-name" style="${h.active ? "" : "opacity:.5"}">${esc(h.name)}${h.active ? "" : " <span class='pill'>pausiert</span>"}</div></div>
-        <div class="row" style="width:100%">
-          <label class="grow" style="margin:0">× pro Woche<select data-action="perweek" data-id="${h.id}">${opts(h.per_week, 1, 7)}</select></label>
-          <label class="grow" style="margin:0">Minuten<select data-action="minutes" data-id="${h.id}">${opts(h.minutes, 1, 30, `<option value="" ${h.minutes ? "" : "selected"}>–</option>`)}</select></label>
+        <div class="row" style="width:100%;flex-wrap:wrap;align-items:flex-start">
+          <label style="margin:0;flex:1;min-width:110px">× pro Woche<select data-action="perweek" data-id="${h.id}">${opts(h.per_week, 1, 7)}</select></label>
+          <div style="flex:2;min-width:200px"><label for="u-${h.id}" style="margin:0">Umfang (optional)</label>
+            <div class="row" style="gap:6px">
+              <select id="u-${h.id}" data-action="unit" data-id="${h.id}" style="flex:1.3">
+                <option value="" ${unitOf(h) === "" ? "selected" : ""}>–</option>
+                <option value="minutes" ${unitOf(h) === "minutes" ? "selected" : ""}>Minuten</option>
+                <option value="reps" ${unitOf(h) === "reps" ? "selected" : ""}>Wiederholungen</option>
+              </select>${amountField(h)}
+            </div></div>
         </div>
         <div class="row"><button class="btn ghost small" data-action="pause" data-id="${h.id}">${h.active ? "Pausieren" : "Aktivieren"}</button>
           <button class="btn ghost small" data-action="delete" data-id="${h.id}">Löschen</button></div>
@@ -401,9 +424,22 @@ appEl.addEventListener("change", (ev) => {
     const { error } = await sb.from("habits").update({ per_week: Number(el.value) }).eq("id", id);
     if (error) throw error; await refresh();
   });
-  if (el.dataset.action === "minutes") run(async () => {
-    const { error } = await sb.from("habits").update({ minutes: el.value ? Number(el.value) : null }).eq("id", id);
+  if (el.dataset.action === "unit") run(async () => {
+    const h = state.habits.find((x) => x.id === id);
+    const patch = el.value === "minutes" ? { minutes: h.minutes || 15, reps: null }
+      : el.value === "reps" ? { reps: h.reps || 5, minutes: null }
+      : { minutes: null, reps: null };
+    const { error } = await sb.from("habits").update(patch).eq("id", id);
     if (error) throw error; await refresh();
+  });
+  if (el.dataset.action === "amount") run(async () => {
+    const h = state.habits.find((x) => x.id === id);
+    const field = h.reps ? "reps" : "minutes", max = field === "reps" ? 100 : 600;
+    const v = Math.min(max, Math.max(1, Math.round(Number(el.value) || 1)));
+    const { error } = await sb.from("habits").update({ [field]: v }).eq("id", id);
+    if (error) throw error;
+    if (String(v) !== el.value) toast(`Maximal ${max} ${field === "reps" ? "Wiederholungen" : "Minuten"}`);
+    await refresh();
   });
 });
 

@@ -29,7 +29,8 @@ create table if not exists public.habits (
   user_id uuid not null references auth.users on delete cascade default auth.uid(),
   name text not null check (char_length(name) between 1 and 60),
   per_week int not null default 5 check (per_week between 1 and 7),
-  minutes int check (minutes between 1 and 120),
+  minutes int check (minutes between 1 and 600),
+  reps int check (reps between 1 and 100),
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
