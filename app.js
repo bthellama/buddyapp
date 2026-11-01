@@ -250,7 +250,7 @@ function renderToday() {
 
   const nudges = state.nudgesIn.map((n) => {
     const h = state.habits.find((x) => x.id === n.habit_id);
-    return `<div class="card nudge row"><div class="grow"><b>🐾 ${esc(nameOf(n.from_user))} stupst dich an${h ? ` (${esc(h.name)})` : ""}:</b>
+    return `<div class="card nudge row"><div class="grow"><b>🐾 ${esc(nameOf(n.from_user))}${h ? ` · ${esc(h.name)}` : ""}</b>
       <p>${esc(n.message)}</p></div><button class="btn small" data-action="seen" data-id="${n.id}">Ok!</button></div>`;
   }).join("");
 
@@ -411,6 +411,20 @@ appEl.addEventListener("submit", (ev) => {
   });
 });
 
+// Automatische Meldung an Buddys, die dasselbe Habit heute noch offen haben
+async function notifyBuddies(habitId, day) {
+  const mine = state.habits.find((x) => x.id === habitId);
+  if (!mine) return [];
+  const monday = mondayOf(day), key = mine.name.trim().toLowerCase();
+  const targets = state.habits.filter((x) => x.user_id !== uid() && x.active
+    && x.name.trim().toLowerCase() === key && !doneOn(x.id, day) && weekCount(x.id, monday) < x.per_week);
+  const message = `Ich hab ${mine.name} erledigt – du hast es heute auch auf dem Plan. Jetzt du! 💪`;
+  const results = await Promise.all(targets.map((x) =>
+    sb.from("nudges").insert({ to_user: x.user_id, habit_id: x.id, message, day })));
+  // Fehler (z.B. heute schon angestupst) bewusst ignorieren
+  return targets.filter((_, i) => !results[i].error).map((x) => nameOf(x.user_id));
+}
+
 async function addHabit(name) {
   if (!name) return;
   const { error } = await sb.from("habits").insert({ name, per_week: 5 });
@@ -458,7 +472,10 @@ document.addEventListener("click", (ev) => {
         ? await sb.from("logs").delete().eq("id", existing.id)
         : await sb.from("logs").insert({ habit_id: id, day: t });
       if (error) throw error;
-      if (!existing) toast(`+${XP_PER_LOG} XP – stark! 🐾`);
+      if (!existing) {
+        const informed = await notifyBuddies(id, t);
+        toast(`+${XP_PER_LOG} XP – stark! 🐾${informed.length ? ` ${informed.join(", ")} weiss Bescheid.` : ""}`);
+      }
       return refresh();
     }
     if (a === "nudge") {
