@@ -136,3 +136,14 @@ create policy "nudges seen" on public.nudges for update to authenticated using (
 
 -- ---------- Live-Aktualisierung ----------
 alter publication supabase_realtime add table public.logs, public.nudges;
+
+-- Keep-alive: harmlose Funktion für den automatischen Ping (GitHub Action),
+-- damit das Gratis-Projekt nicht wegen Inaktivität pausiert wird. Liest keine Daten.
+create or replace function public.ping()
+returns text
+language sql
+stable
+as $$ select 'pong'::text $$;
+
+revoke all on function public.ping() from public;
+grant execute on function public.ping() to anon, authenticated;

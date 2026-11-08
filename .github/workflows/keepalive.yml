@@ -1,0 +1,19 @@
+name: Supabase keep-alive
+
+# Pingt die Datenbank alle 3 Tage, damit das Gratis-Projekt nicht pausiert wird.
+on:
+  schedule:
+    - cron: "17 6 */3 * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          curl --fail -sS -X POST \
+            "https://sysumpruathevszfcroa.supabase.co/rest/v1/rpc/ping" \
+            -H "apikey: sb_publishable_lO54rUaImgj6up8hXCYkCQ_zj1lP1F7" \
+            -H "Content-Type: application/json" \
+            -d '{}'
