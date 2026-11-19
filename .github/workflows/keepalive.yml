@@ -1,9 +1,10 @@
 name: Supabase keep-alive
 
-# Pingt die Datenbank alle 3 Tage, damit das Gratis-Projekt nicht pausiert wird.
+# Pingt die Datenbank täglich (schreibt in public.keepalive), damit das
+# Gratis-Projekt nicht pausiert wird.
 on:
   schedule:
-    - cron: "17 6 */3 * *"
+    - cron: "17 6 * * *"
   workflow_dispatch: {}
 
 jobs:

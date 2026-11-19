@@ -137,13 +137,30 @@ create policy "nudges seen" on public.nudges for update to authenticated using (
 -- ---------- Live-Aktualisierung ----------
 alter publication supabase_realtime add table public.logs, public.nudges;
 
--- Keep-alive: harmlose Funktion für den automatischen Ping (GitHub Action),
--- damit das Gratis-Projekt nicht wegen Inaktivität pausiert wird. Liest keine Daten.
+-- Keep-alive: Funktion für den automatischen Ping (GitHub Action), damit das
+-- Gratis-Projekt nicht wegen Inaktivität pausiert wird. Schreibt bei jedem Aufruf
+-- in eine eigene Mini-Tabelle (ein reines "select 'pong'" hat Supabase am
+-- 19.11.2026 NICHT als Aktivität gezählt). Berührt keine Nutzerdaten.
+create table if not exists public.keepalive (
+  id        int primary key,
+  last_ping timestamptz not null default now(),
+  pings     bigint not null default 0
+);
+alter table public.keepalive enable row level security;  -- keine Policies: direkt nicht lesbar
+insert into public.keepalive (id) values (1) on conflict (id) do nothing;
+
 create or replace function public.ping()
 returns text
 language sql
-stable
-as $$ select 'pong'::text $$;
+volatile
+security definer
+set search_path = public
+as $$
+  update public.keepalive
+     set last_ping = now(), pings = pings + 1
+   where id = 1
+  returning 'pong #' || pings::text;
+$$;
 
 revoke all on function public.ping() from public;
 grant execute on function public.ping() to anon, authenticated;
